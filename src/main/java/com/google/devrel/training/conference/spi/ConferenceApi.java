@@ -9,9 +9,15 @@ import com.google.api.server.spi.response.ConflictException;
 import com.google.api.server.spi.response.ForbiddenException;
 import com.google.api.server.spi.response.NotFoundException;
 import com.google.api.server.spi.response.UnauthorizedException;
+import com.google.appengine.api.memcache.MemcacheService;
+import com.google.appengine.api.memcache.MemcacheServiceFactory;
+import com.google.appengine.api.taskqueue.Queue;
+import com.google.appengine.api.taskqueue.QueueFactory;
+import com.google.appengine.api.taskqueue.TaskOptions;
 //import com.google.appengine.api.datastore.Entity;
 import com.google.appengine.api.users.User;
 import com.google.devrel.training.conference.Constants;
+import com.google.devrel.training.conference.domain.Announcement;
 import com.google.devrel.training.conference.domain.Conference;
 import com.google.devrel.training.conference.domain.Profile;
 import com.google.devrel.training.conference.form.ConferenceForm;
@@ -204,7 +210,10 @@ public class ConferenceApi {
 		// TODO (Lesson 4)
 		// Save Conference and Profile Entities
 		ofy().save().entities(profile, conference).now();
-
+		String conInf = conference.toString();
+		Queue queue = QueueFactory.getQueue("email-queue");
+		queue.add(TaskOptions.Builder.withUrl("/send-email").param("email", user.getEmail())
+				.param("conferenceInfo", conInf));
 		return conference;
 	}
 
@@ -244,9 +253,7 @@ public class ConferenceApi {
 		return q.list();
 	}
 
-	@ApiMethod(name = "getConferencesFiltered",
-			path = "getConferencesFiltered",
-			httpMethod = HttpMethod.POST)
+	@ApiMethod(name = "getConferencesFiltered", path = "getConferencesFiltered", httpMethod = HttpMethod.POST)
 	public List<Conference> getConferencesFiltered() {
 		Query query = ofy().load().type(Conference.class);
 		query = query.filter("maxAttendees >", 10);
@@ -357,8 +364,8 @@ public class ConferenceApi {
 
 					// TODO
 					// Get the user's Profile entity
-					Profile profile =  ofy().load().key(Key.create(Profile.class,userId)).now(); // TODO load
-					
+					Profile profile = ofy().load().key(Key.create(Profile.class, userId)).now(); // TODO
+																									// load
 
 					// Has the user already registered to attend this
 					// conference?
@@ -402,7 +409,7 @@ public class ConferenceApi {
 			} else if (result.getReason() == "No seats available") {
 				throw new ConflictException("There are no seats available");
 			} else {
-				
+
 				throw new ForbiddenException("Unknown exception");
 			}
 		}
@@ -436,27 +443,28 @@ public class ConferenceApi {
 
 		// TODO
 		// Get the value of the profile's conferenceKeysToAttend property
-		List<String> keyStringsToAttend = profile.getConferenceKeysToAttend(); // change this
+		List<String> keyStringsToAttend = profile.getConferenceKeysToAttend(); // change
+																				// this
 
 		// TODO
 		// Iterate over keyStringsToAttend,
 		// and return a Collection of the
 		// Conference entities that the user has registered to atend
 		Collection<Conference> colle = new ArrayList<>(0);
-		for(String k: keyStringsToAttend){
+		for (String k : keyStringsToAttend) {
 			Key<Conference> key = Key.create(k);
 			Conference c = ofy().load().key(key).now();
-			if(c != null)
+			if (c != null)
 				colle.add(c);
 		}
-		
+
 		return colle; // change this
 	}
 
-    @ApiMethod(name = "unregisterFromConference", path = "conference/{websafeConferenceKey}/registration", httpMethod = HttpMethod.DELETE)
+	@ApiMethod(name = "unregisterFromConference", path = "conference/{websafeConferenceKey}/registration", httpMethod = HttpMethod.DELETE)
 	public WrappedBoolean unregisterFromConference(final User user,
 			@Named("websafeConferenceKey") final String websafeConferenceKey)
-			throws UnauthorizedException, NotFoundException, ForbiddenException, ConflictException {
+					throws UnauthorizedException, NotFoundException, ForbiddenException, ConflictException {
 		// If not signed in, throw a 401 error.
 		if (user == null) {
 			throw new UnauthorizedException("Authorization required");
@@ -491,15 +499,16 @@ public class ConferenceApi {
 					if (!profile.getConferenceKeysToAttend().contains(websafeConferenceKey)) {
 						return new WrappedBoolean(false, "You are not registred to this conference");
 					} else {
-						//Unregister user.
-						profile.unregisterFromConference(websafeConferenceKey);;
+						// Unregister user.
+						profile.unregisterFromConference(websafeConferenceKey);
+						;
 
 						// Increase the conference's seatsAvailable
 						conference.giveBackSeats(1);
 
 						// Save the Conference and Profile entities
 						ofy().save().entities(profile, conference).now();
-						
+
 						return new WrappedBoolean(true, "Successfully unregistred!");
 					}
 
@@ -521,6 +530,15 @@ public class ConferenceApi {
 			}
 		}
 		return result;
+	}
+
+	@ApiMethod(name = "getAnnouncement", path = "announcement", httpMethod = HttpMethod.GET)
+	public Announcement getAnnouncement() {
+		// TODO GET announcement from memcache by key and if it exist return it
+		MemcacheService memCache = MemcacheServiceFactory.getMemcacheService();
+		String msg = (String)memCache.get(Constants.MEMCACHE_ANNOUNCEMENTS_KEY);
+		Announcement val = new Announcement(msg);
+		return val;
 	}
 
 }

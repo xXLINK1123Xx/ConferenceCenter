@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cronentries>
+	<cron>
+		<url>/crons/set_announcement</url>
+		<description>Set Announcement</description>
+		<schedule>every day 00:00</schedule>
+		<timezone>Europe/Kiev</timezone>
+	</cron>
+	<cron>
+		<url>/crons/set_announcement</url>
+		<description>Mail out a daily report</description>
+		<schedule>every monday 23:55</schedule>
+		<timezone>Europe/Kiev</timezone>
+	</cron>
+</cronentries>
